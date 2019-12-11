@@ -20,17 +20,17 @@ template <typename Deserializer, typename Serializer, typename Bytes> struct RPC
   };
 
   template <typename Class, typename... NamedMethods> class RPCReceiver {
-    std::unique_ptr<Class> _this;
+    Class *_this;
 
     std::array<std::unique_ptr<GenericSingleRPCReceiver>, sizeof...(NamedMethods)> invocation_targets;
 
   public:
     RPCReceiver(Class *c, typename NamedMethods::fun_t... f)
         : _this(c), invocation_targets{
-                             std::unique_ptr<GenericSingleRPCReceiver>{new SingleRPCReceiver<NamedMethods>(f)} ...} {}
+                        std::unique_ptr<GenericSingleRPCReceiver>{new SingleRPCReceiver<NamedMethods>(f)}...} {}
 
     Bytes invoke(const Deserializer &deserializer, const Serializer &serializer, Bytes &serialized, int target) {
-      return invocation_targets[target].invoke(deserializer, serializer, serialized);
+      return invocation_targets[target]->invoke(deserializer, serializer, serialized);
     }
   };
 
