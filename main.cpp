@@ -49,6 +49,18 @@ struct serializer_t {
 using simpleRPC = RPCFramework<deserializer_t, serializer_t, Bytes>;
 template <typename T> using RPCBuilder = typename simpleRPC::Builder<T>;
 
+#define REGISTER_RPC(Test, foo, bar, baz, bop)                                                                         \
+  enum class rpc : int { foo = 0, bar = 1, baz = 2, bop = 3 };                                                         \
+  auto register_rpc_targets(RPCBuilder<Test> &r) {                                                                     \
+    return r.build_receiver(this, name_fun<rpc, rpc::foo>(&Test::foo), name_fun<rpc, rpc::bar>(&Test::bar),            \
+                            name_fun<rpc, rpc::baz>(&Test::baz), name_fun<rpc, rpc::bop>(&Test::bop));                 \
+  }                                                                                                                    \
+                                                                                                                       \
+  auto register_rpc_invocations(RPCBuilder<Test> &r) {                                                                 \
+    return r.build_invoker(this, name_fun<rpc, rpc::foo>(&Test::foo), name_fun<rpc, rpc::bar>(&Test::bar),             \
+                           name_fun<rpc, rpc::baz>(&Test::baz), name_fun<rpc, rpc::bop>(&Test::bop));                  \
+  }
+
 struct Test {
 
   void foo() { std::cout << "foo called" << std::endl; }
@@ -58,15 +70,7 @@ struct Test {
 
   int bop(int i, int d) { return i + d; }
 
-  auto register_rpc_targets(RPCBuilder<Test> &r) {
-    return r.build_receiver(this, name_fun<0>(&Test::foo), name_fun<1>(&Test::bar), name_fun<2>(&Test::baz),
-                            name_fun<3>(&Test::bop));
-  }
-
-  auto register_rpc_invocations(RPCBuilder<Test> &r) {
-    return r.build_invoker(this, name_fun<0>(&Test::foo), name_fun<1>(&Test::bar), name_fun<2>(&Test::baz),
-                           name_fun<3>(&Test::bop));
-  }
+  REGISTER_RPC(Test, foo, bar, baz, bop)
 };
 
 int main() {
@@ -76,6 +80,6 @@ int main() {
   auto bld = t.register_rpc_invocations(r);
   auto ipair = bld.build_invocation(serializer_t{}, (int)12, (double)23.5);
   rpc.invoke(deserializer_t{}, serializer_t{}, ipair.second, ipair.first);
-  auto ipair2 = bld.build_invocation<0>(serializer_t{});
+  auto ipair2 = bld.build_invocation<Test::rpc::foo>(serializer_t{});
   rpc.invoke(deserializer_t{}, serializer_t{}, ipair2.second, ipair2.first);
 }

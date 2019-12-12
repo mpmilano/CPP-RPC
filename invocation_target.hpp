@@ -14,8 +14,9 @@ template <typename Deserializer, typename Serializer, typename Bytes> struct RPC
 
   template <typename> struct SingleRPCReceiver;
 
-  template <int id, typename Class, typename Ret, typename... Args>
-  struct SingleRPCReceiver<named_member_fun<id, Ret (Class::*)(Args...)>> : public GenericSingleRPCReceiver<Class> {
+  template <typename Namespace, Namespace id, typename Class, typename Ret, typename... Args>
+  struct SingleRPCReceiver<named_member_fun<Namespace, id, Ret (Class::*)(Args...)>>
+      : public GenericSingleRPCReceiver<Class> {
     Ret (Class::*method)(Args...);
     SingleRPCReceiver(Ret (Class::*method)(Args...)) : method(method) {}
     Ret invoke_step1(Class &_this, const Deserializer &d, Bytes &b) const {
@@ -43,30 +44,33 @@ template <typename Deserializer, typename Serializer, typename Bytes> struct RPC
         : _this(c), invocation_targets{
                         std::unique_ptr<GenericSingleRPCReceiver<Class>>{new SingleRPCReceiver<NamedMethods>(f)}...} {}
 
-    Bytes invoke(const Deserializer &deserializer, const Serializer &serializer, Bytes &serialized, int target) {
-      return invocation_targets[target]->invoke(*_this, deserializer, serializer, serialized);
+    Bytes invoke(const Deserializer &deserializer, const Serializer &serializer, Bytes &serialized,
+                 typename Class::rpc target) {
+      return invocation_targets[(int)target]->invoke(*_this, deserializer, serializer, serialized);
     }
   };
 
   template <typename> struct SingleInvoker;
-  template <int id, typename Class, typename Ret, typename... Args>
-  struct SingleInvoker<named_member_fun<id, Ret (Class::*)(Args...)>> {
-    std::pair<int, Bytes> build_invocation(const Serializer &s, const Args &... a) const {
-      return std::pair<int, Bytes>{id, s.serialize(a...)};
+  template <typename Namespace, Namespace id, typename Class, typename Ret, typename... Args>
+  struct SingleInvoker<named_member_fun<Namespace, id, Ret (Class::*)(Args...)>> {
+    std::pair<Namespace, Bytes> build_invocation(const Serializer &s, const Args &... a) const {
+      return std::pair<Namespace, Bytes>{id, s.serialize(a...)};
     }
 
-    const SingleInvoker &get_invoker(std::integral_constant<int, id>) const { return *this; }
+    const SingleInvoker &get_invoker(std::integral_constant<Namespace, id>) const { return *this; }
   };
 
   template <typename Class, typename... NamedMethods> class RPCInvoker : public SingleInvoker<NamedMethods>... {
 
   public:
-    using invocation_pair = std::pair<int, Bytes>;
+    using invocation_pair = std::pair<typename Class::rpc, Bytes>;
     using SingleInvoker<NamedMethods>::build_invocation...;
     using SingleInvoker<NamedMethods>::get_invoker...;
 
-    template <int i, typename... T> invocation_pair build_invocation(const Serializer &s, T &&... t) const {
-      return this->template get_invoker(std::integral_constant<int, i>{}).build_invocation(s, std::forward<T>(t)...);
+    template <typename Class::rpc i, typename... T>
+    invocation_pair build_invocation(const Serializer &s, T &&... t) const {
+      return this->template get_invoker(std::integral_constant<typename Class::rpc, i>{})
+          .build_invocation(s, std::forward<T>(t)...);
     }
   };
 
