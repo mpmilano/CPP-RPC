@@ -48,17 +48,44 @@ template <typename Deserializer, typename Serializer, typename Bytes> struct RPC
     }
   };
 
+  template <typename> struct SingleInvoker;
+  template <int id, typename Class, typename Ret, typename... Args>
+  struct SingleInvoker<named_member_fun<id, Ret (Class::*)(Args...)>> {
+    std::pair<int, Bytes> build_invocation(const Serializer &s, const Args &... a) const {
+      return std::pair<int, Bytes>{id, s.serialize(a...)};
+    }
+
+    const SingleInvoker &get_invoker(std::integral_constant<int, id>) const { return *this; }
+  };
+
+  template <typename Class, typename... NamedMethods> class RPCInvoker : public SingleInvoker<NamedMethods>... {
+
+  public:
+    using invocation_pair = std::pair<int, Bytes>;
+    using SingleInvoker<NamedMethods>::build_invocation...;
+    using SingleInvoker<NamedMethods>::get_invoker...;
+
+    template <int i, typename... T> invocation_pair build_invocation(const Serializer &s, T &&... t) const {
+      return this->template get_invoker(std::integral_constant<int, i>{}).build_invocation(s, std::forward<T>(t)...);
+    }
+  };
+
   template <typename Class, typename... Methods>
   static RPCReceiver<Class, Methods...> make_rpc_receiver(Class *c, Methods... m) {
     return RPCReceiver<Class, Methods...>{c, m.f...};
   }
 
-  template <typename T> class RPCReceiverBuilder {
+  template <typename T> class Builder {
 
   public:
     template <typename... functions>
-    auto build_receiver(T *t, const functions &... f) -> RPCReceiver<T, TOF(ensure_named_member_fun(f))...> {
+    static auto build_receiver(T *t, const functions &... f) -> RPCReceiver<T, TOF(ensure_named_member_fun(f))...> {
       return make_rpc_receiver(t, f...);
+    }
+
+    template <typename... functions>
+    static auto build_invoker(T *, const functions &... f) -> RPCInvoker<T, TOF(ensure_named_member_fun(f))...> {
+      return RPCInvoker<T, TOF(ensure_named_member_fun(f))...>{};
     }
   };
 };

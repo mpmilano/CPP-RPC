@@ -47,29 +47,35 @@ struct serializer_t {
   }
 };
 using simpleRPC = RPCFramework<deserializer_t, serializer_t, Bytes>;
-template <typename T> using RPCReceiverBuilder = typename simpleRPC::RPCReceiverBuilder<T>;
+template <typename T> using RPCBuilder = typename simpleRPC::Builder<T>;
 
 struct Test {
 
-  void foo() {}
+  void foo() { std::cout << "foo called" << std::endl; }
   void bar(int a, double b) { std::cout << "bar called with " << a << " and " << b << std::endl; }
 
   int baz() { return 0; }
 
   int bop(int i, int d) { return i + d; }
 
-  auto register_rpc_targets(RPCReceiverBuilder<Test> &r) {
+  auto register_rpc_targets(RPCBuilder<Test> &r) {
     return r.build_receiver(this, name_fun<0>(&Test::foo), name_fun<1>(&Test::bar), name_fun<2>(&Test::baz),
                             name_fun<3>(&Test::bop));
   }
 
-  void register_rpc_invocations() {}
+  auto register_rpc_invocations(RPCBuilder<Test> &r) {
+    return r.build_invoker(this, name_fun<0>(&Test::foo), name_fun<1>(&Test::bar), name_fun<2>(&Test::baz),
+                           name_fun<3>(&Test::bop));
+  }
 };
 
 int main() {
   Test t;
-  RPCReceiverBuilder<Test> r;
+  RPCBuilder<Test> r;
   auto rpc = t.register_rpc_targets(r);
-  auto vec = serializer_t{}.serialize((int)12, (double)23.5);
-  rpc.invoke(deserializer_t{}, serializer_t{}, vec, 1);
+  auto bld = t.register_rpc_invocations(r);
+  auto ipair = bld.build_invocation(serializer_t{}, (int)12, (double)23.5);
+  rpc.invoke(deserializer_t{}, serializer_t{}, ipair.second, ipair.first);
+  auto ipair2 = bld.build_invocation<0>(serializer_t{});
+  rpc.invoke(deserializer_t{}, serializer_t{}, ipair2.second, ipair2.first);
 }
